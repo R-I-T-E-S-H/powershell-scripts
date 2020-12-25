@@ -1,0 +1,139 @@
+<#
+
+.SYNOPSIS
+This script is developed for existing group details including members and memberof
+
+.DESCRIPTION
+Takes input from source file and Export file
+SourceFile Format i.e Source.txt (Three Column as mentioned) 
+LunaGroups, Description, Domain1Groups
+
+.EXAMPLE
+./Task2.ps1
+
+---------------------------EXAMPLE 2---------------------------
+
+./Task2 -GroupFile "C:\temp\source.txt" -ExportFile "C:\temp\export.csv"
+
+
+---------------------------EXAMPLE 3---------------------------
+
+
+
+.NOTES
+The Script is meant to be executed by Authorized Admins. Executor needs to have Minimum of read permissions on Active Directory.
+Created By    : Ritesh Grover 
+Reviewed By   :      
+Version: 1.0
+.LINK
+N/A
+
+#>
+param (
+    #Provide source file path like C:\temp\source.csv
+    [Parameter(Mandatory=$True)]
+    [ValidateNotNullOrEmpty()]
+    $GroupFile,
+
+     #Provide file path with export file name like C:\temp\export.csv
+    [Parameter(Mandatory=$True)]
+    [ValidateNotNullOrEmpty()]
+    $ExportFile
+)
+$GroupFile = "C:\Temp\source.txt"
+$ExecutionTime = Get-date
+$TiTle = "TASK 2 : LUNA GROUPS MEMBERSHIP AND MEMBEROF REPORT BEFORE CHANGE"
+$username = $env:username
+$report = @()
+$GCount = 0
+$result = @() 
+$Groups = Import-Csv $GroupFile 
+$GroupsCount = $Groups.Count
+foreach ($Group in $Groups) 
+{ 
+$GroupName = $Group.LunaGroups
+$GNResult=get-Adgroup -Filter 'Name -eq $GroupName'
+    if ($GNResult -ne $NUll)
+        {
+        $GNResult=get-Adgroup -Filter 'Name -eq $GroupName'
+        $result +=  "" 
+        $result += "********************************************************"
+        $result += "GROUP NAME : $GroupName exists" 
+        $GroupType=$GNResult.GroupScope
+        $result += "********************************************************"
+        $result += "GROUP NAME : $GroupName"
+        $result += "GROUP TYPE : $GroupType"
+        $Members = get-adgroupmember -Identity $GroupName
+        $MembersCount = 0
+        foreach($Member in $Members)
+        {
+        $MembersCount = $MembersCount +1
+        }
+        $MemberUsers = $Members | where{$_.ObjectClass -eq "user"}
+        $MembersUsersCount=0
+        foreach($MemberUser in $MemberUsers)
+        {
+        $MembersUsersCount = $MembersUsersCount +1
+        }
+        $MemberGroups = $Members | where{$_.ObjectClass -eq "Group"}
+        $MembersGroupsCount=0
+        foreach($MemberGroup in $MemberGroups)
+        {
+        $MembersGroupsCount = $MembersGroupsCount +1
+        }
+        $result += "Total Members (All)    : $MembersCount `r"
+        $result += "Total Members (Users)  : $MembersUsersCount `r"
+        $result += "Total Members (Groups) : $MembersGroupsCount `r"
+        $MembersOf = Get-ADPrincipalGroupMembership -Identity $GroupName
+        $MembersOfCount = 0
+        foreach($MemberOf in $MembersOf)
+        {
+        $MembersOfCount = $MembersOfCount +1
+        }
+        $result += "Total MembersOf        : $MembersOfCount `r"
+            if($MembersCount -cge 1)
+                {
+                $result += "" 
+                $result +=  "Members" 
+                $result += "*********"
+                $result += get-adgroupmember -Identity $GroupName  | select-object SAMAccountName, ObjectClass
+                 }
+            else
+                {
+                $result += "" 
+                }
+            if($MembersOfCount -cge 1)
+                {
+                $result += "" 
+                $result += "MembersOf" 
+                $result += "**********" 
+                $result += Get-ADPrincipalGroupMembership -Identity $GroupName | Select-Object SAMAccountName
+                }
+            else
+                {
+                $result += "" 
+                 }
+        
+        }
+         else
+        {
+        $result +=  "" 
+        $result += "********************************************************"
+        $result += "GROUP NAME : $GroupName doesn't exists" 
+         }
+
+}
+
+$report += "********************************************************"
+$report += "***********************REPORT***************************"
+$report += "TASK TITLE       : $Title "
+$report += "EXECUTION DATE   : $ExecutionTime"
+$report += "EXECUTED BY      : $username"
+$report += "TOTAL GROUPS     : $Groupscount"
+$report += "********************************************************"
+
+                             
+$report >> $ExportFile
+$result >> $ExportFile  
+ 
+

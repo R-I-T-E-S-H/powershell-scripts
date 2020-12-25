@@ -1,0 +1,36 @@
+{
+    "mode": "Indexed",
+    "type": "Microsoft.Authorization/policyDefinitions",
+    "name": "contoso-append-tag-from-rg",
+    "properties" : {
+        "displayName": "Append Tag From Resource Group",
+        "description": "This policy Appends TAGS From RG",
+        "metadata": {
+          "category": "TAG"
+          },    
+          "policyRule": {
+            "if": {
+              "field": "[concat('tags[', parameters('tagName'), ']')]",
+              "exists": "false"
+            },
+            "then": {
+              "effect": "append",
+              "details": [
+                {
+                  "field": "[concat('tags[', parameters('tagName'), ']')]",
+                  "value": "[resourceGroup().tags[parameters('tagName')]]"
+                }
+              ]
+            }
+          },
+          "parameters": {
+            "tagName": {
+              "type": "String",
+              "metadata": {
+                "displayName": "Tag Name",
+                "description": "Name of the tag, such as 'environment'"
+              }
+            }
+          }
+      }
+  }

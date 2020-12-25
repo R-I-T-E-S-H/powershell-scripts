@@ -1,0 +1,254 @@
+<#
+
+.SYNOPSIS
+Zone and Host Record Creation Script for DNS SyncHole Requirement
+
+.DESCRIPTION
+Create Zone on Primary Server, Replicate Zone to Secondary & Create Host Record in the Zone based on provided values
+
+.EXAMPLE
+./DNSSyncHole.ps1
+
+---------------------------EXAMPLE 2---------------------------
+
+DNSSyncHole.ps1 -ZoneName testzone -HostName abc -ChangeTicket AS223222 -Action Add
+
+
+---------------------------EXAMPLE 3---------------------------
+
+DNSSyncHole.ps1 -ZoneName testzone -HostName abc -ChangeTicket AS223222 -Action Remove
+
+.NOTES
+The Script is meant to be executed by Authorized DNB Admin. Executor needs to have Minimum of DNS Admin Rights
+Created By	: Ritesh Grover
+Version: 2.0
+.LINK
+N/A
+
+#>
+
+# $ZoneName = zone
+# $HostName = Machine FQDN
+# $PrimaryDNS = Pri DC IP (Hard Coded)
+# $SecondaryDNS = Sec DC IP (Hard Coded)
+# $ChangeTicket = Change number
+# $HostIP = IP Address (Hard Coded)
+# $Action = Add or Remove
+
+
+param (
+#Provide Zone Name for Zone Creation
+[Parameter(Mandatory=$True)]
+[ValidateNotNullOrEmpty()]
+$ZoneName,
+
+#Provide Host Name to create A Record
+[Parameter(Mandatory=$True)]
+[ValidateNotNullOrEmpty()]
+$HostName,
+
+#Provide TicketNumber or Creator's ABID
+[Parameter(Mandatory=$True)]
+[ValidateNotNullOrEmpty()]
+$ChangeTicket,
+
+#Provide Add or Remove Action
+[Parameter(Mandatory=$True)]
+[ValidateSet("Add","Remove")] 
+$Action
+
+)
+
+$PrimaryDNS = "xxxx.xxxx.xxxx"
+$SecondaryDNS = "xxxx.xxxx.xxxx"
+$HostIP = "XXXXXXX"
+$Trace = ""
+$EventSource = Get-EventLog -LogName Application -ErrorAction SilentlyContinue |Select-Object Source -Unique | where{$_.Source -eq "DNSSyncHole1"}
+
+Try
+{
+        if($Action -eq "Add")
+            {
+            Try
+               {
+               #create the primary zone
+               $dnsfile = -join($ZoneName , ".dns")
+               Add-DnsServerPrimaryZone -Name $ZoneName -ZoneFile $dnsfile -ComputerName $PrimaryDNS -ResponsiblePerson $ChangeTicket
+               Write-Host "Adding Primary Zone" -ForegroundColor DarkGreen  -BackgroundColor White
+               $Trace = $Trace + "`n Primary Zone with name $ZoneName is added"
+               }
+            catch
+               { 
+               Write-Host $_.Exception.Message  -ForegroundColor Red -BackgroundColor White
+               }
+            Try
+               {
+                $PrimaryDNSIP = (Resolve-DnsName $PrimaryDNS | where{$_.Type -eq "A"}).IPAddress
+                Add-DnsServerSecondaryZone -Name $ZoneName -ZoneFile $dnsfile -MasterServers $PrimaryDNSIP -ComputerName $SecondaryDNS
+                Write-Host "Adding Secondary Zone" -ForegroundColor DarkGreen  -BackgroundColor White
+                $Trace = $Trace + "`n Secondary Zone with name $ZoneName is added "
+                }
+            catch
+                { 
+                Write-Host $_.Exception.Message  -ForegroundColor Red -BackgroundColor White
+                }
+            Try
+               {
+                $SecondaryDNSIP = (Resolve-DnsName $SecondaryDNS | where{$_.Type -eq "A"}).IPAddress
+                Set-DnsServerPrimaryZone -Name $ZoneName -ComputerName $PrimaryDNS -Notify NotifyServers -NotifyServers $SecondaryDNSIP -SecureSecondaries TransferToSecureServers -SecondaryServers $SecondaryDNSIP
+                Write-Host "Notifying Zone  to Secondary Server" -ForegroundColor DarkGreen  -BackgroundColor White
+                $Trace = $Trace + "`n Notify Zone to Secondary Server"
+                }
+            catch
+                { 
+                Write-Host $_.Exception.Message  -ForegroundColor Red -BackgroundColor White
+                }
+            Try
+               {
+                Add-DnsServerResourceRecordA -Name $HostName -ComputerName $PrimaryDNS -ZoneName $ZoneName -AllowUpdateAny -IPv4Address $HostIP -TimeToLive  '00:10:00'
+                Write-Host "Adding A record " -ForegroundColor DarkGreen -BackgroundColor White
+                $Trace = $Trace + "`n Added Resource Record of Type A with HostName $HostName"
+                }
+           catch 
+                {
+                Write-Host $_.Exception.Message  -ForegroundColor Red -BackgroundColor White
+                }
+            Try
+               {
+                Sync-DnsServerZone -Name $ZoneName
+                Write-Host "Synchronizing Server Zone" -ForegroundColor DarkGreen  -BackgroundColor White
+                $Trace = $Trace + "`n Sync of Zone $ZoneName completed"
+                }
+            catch 
+                {
+                Write-Host $_.Exception.Message  -ForegroundColor Red -BackgroundColor White
+                }
+            Try
+               {
+                #Do a zone transer
+                Start-DnsServerZoneTransfer  -Name $ZoneName -FullTransfer -PassThru
+                Write-Host "Running Zone Transfer" -ForegroundColor DarkGreen  -BackgroundColor White
+                $Trace = $Trace + "`n Zone Transfer Started"
+               }
+            catch 
+               {
+                Write-Host $_.Exception.Message  -ForegroundColor Red -BackgroundColor White
+                }
+                $Trace = "Action : ADD" + "`n $Trace"
+                if($EventSource = $True)
+                {
+                Write-EventLog -Logname "Application" -Source "DNSSyncHole" -EntryType Information -Message $Trace -EventId 1000 
+                }
+                else
+                {
+                 New-EventLog -LogName Application -Source "DNSSyncHole"
+                 Write-EventLog -Logname "Application" -Source "DNSSyncHole" -EntryType Information -Message $Trace -EventId 1000 
+                }
+                Clear-DnsClientCache -AsJob
+            }
+        else
+            {
+             try
+                {
+                $HostRecord=Get-DnsServerResourceRecord -ZoneName $ZoneName -RRType A | where{$_.RecordData.IPv4Address.IPAddressToString -eq $HostIP}
+                if($HostRecord)
+                    {
+                     Write-Host "WARNING : You are deleting Record of Type A with IP $HostIP from Zone $ZoneName" -ForegroundColor Yellow -BackgroundColor Black
+                     $response = read-host "Press A to abort, any other key to continue."
+                     $aborted = $response -eq "A"
+                        if($aborted -eq "A")
+                            {
+                            $Trace = $Trace + "`n Script Aborted by User at Resource Record Deletion Stage"
+                            $Trace = "Action : REMOVE" + "`n $Trace"
+                            if($EventSource = $True)
+                                {
+                                Write-EventLog -Logname "Application" -Source "DNSSyncHole" -EntryType Information -Message $Trace -EventId 1001 
+                                }
+                                else
+                                {
+                                 New-EventLog -LogName Application -Source "DNSSyncHole"
+                                 Write-EventLog -Logname "Application" -Source "DNSSyncHole" -EntryType Information -Message $Trace -EventId 1001 
+                                 }
+                            Exit
+                             }
+                        else
+                            {
+                            Write-Host "Deleting Record of Type A with IP $HostIP from Zone $ZoneName" -ForegroundColor red
+                            Remove-DnsServerResourceRecord -ZoneName $ZoneName -ComputerName $PrimaryDNS -RRType "A" -Name $HostName -Force -Verbose
+                            Write-Host " A record deleted..." -ForegroundColor red
+                            $Trace = $Trace + "`n Resource Record with name $HostName deleted"
+                            }
+
+                      }
+                else
+                    {
+                    Write-Host "Resource Record $HostName doesnot exists in $ZoneName Zone which matches the SyncHole IP address $HOstIP" -ForegroundColor Red 
+                    $Trace = $Trace + "`n Resource Record with name $HostName in $ZoneName that matches the SyncHole IP address $HOstIP doesnot exists"
+                    }
+               try
+                {
+                $ServerZone=Get-DnsServerResourceRecord -ZoneName $ZoneName -RRType SOA
+                $LowerChangeTicket = $ChangeTicket.ToLower()
+                if($ServerZone.RecordData.ResponsiblePerson.Contains($LowerChangeTicket))
+                    {
+                    Write-Host "WARNING : You are deleting $Zone $ZoneName" -ForegroundColor Yellow -BackgroundColor Black
+                    $response = read-host "Press A to abort, any other key to continue."
+                    $aborted = $response -eq "A"
+                        if($aborted -eq "A")
+                            {
+                            $Trace = $Trace + "`n Script Aborted by User at Zone $ZoneName deletion Stage"
+                            $Trace = "Action : REMOVE" + "`n $Trace"
+                            if($EventSource = $True)
+                                {
+                                Write-EventLog -Logname "Application" -Source "DNSSyncHole" -EntryType Information -Message $Trace -EventId 1001 
+                                }
+                                else
+                                {
+                                 New-EventLog -LogName Application -Source "DNSSyncHole"
+                                 Write-EventLog -Logname "Application" -Source "DNSSyncHole" -EntryType Information -Message $Trace -EventId 1001 
+                                }
+                            Exit
+                            }
+                        else
+                            {
+                            Remove-DnsServerZone -ZoneName $ZoneName  -ComputerName $PrimaryDNS -Verbose -Force
+                            Remove-DnsServerZone -ZoneName $ZoneName  -ComputerName $SecondaryDNS -Verbose -Force
+                            Write-Host " Zone exists . Deleting..." -ForegroundColor red 
+                            $Trace = $Trace + "`n Zone $ZoneName deleted from $PrimaryDNS & $SecondaryDNS servers"
+                            }
+                      }
+                 else
+                     {
+                     Write-Host "Zone $ZoneName doesnot exists or mentioned Ticket Number doesnot matched the record. Kindly revalidate and try again with correct details" -ForegroundColor Red 
+                     $Trace = $Trace + "`n Zone $ZoneName doesnot exists or Mentioned Ticket Number doesnot matched the record kindly revalidate"
+                      }
+                    }
+               catch
+                {
+                Write-Host $_.Exception.Message  -ForegroundColor Red -BackgroundColor White
+                 }
+Clear-DnsClientCache �AsJob
+}
+             catch
+                { 
+                Write-Host $_.Exception.Message  -ForegroundColor Red -BackgroundColor White 
+                }
+             $Trace = "Action : REMOVE" + "`n $Trace"
+             Write-EventLog -Logname "Application" -Source "DNSSyncHole" -EntryType Information -Message $Trace -EventId 1001
+             if($EventSource = $True)
+                {
+                Write-EventLog -Logname "Application" -Source "DNSSyncHole" -EntryType Information -Message $Trace -EventId 1001 
+                }
+                else
+                {
+                 New-EventLog -LogName Application -Source "DNSSyncHole"
+                 Write-EventLog -Logname "Application" -Source "DNSSyncHole" -EntryType Information -Message $Trace -EventId 1001 
+                } 
+             }
+}
+catch
+{ 
+Write-Host $_.Exception.Message  -ForegroundColor Red -BackgroundColor White 
+}
+#>
+        

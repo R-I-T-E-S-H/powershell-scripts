@@ -1,0 +1,227 @@
+###JEABUILD###
+$JEARole = JEARole-EUC-Support-Admin-L1
+if ((Test-Path -Path "$env:ProgramFiles\WindowsPowerShell\Modules\JEARoleOperators") -eq $False)
+{
+Write-Output "Creating Directory"
+New-Item -Path "$env:ProgramFiles\WindowsPowerShell\Modules\JEARoleOperators" -ItemType Directory
+}
+else
+{
+Write-Output "Directory Already Exists"
+}
+
+
+if ((Test-Path -Path "$env:ProgramFiles\WindowsPowerShell\Modules\JEARoleOperators\$JEARole") -eq $False)
+{
+Write-Output "Creating Directory"
+New-Item -Path "$env:ProgramFiles\WindowsPowerShell\Modules\JEARoleOperators\$JEARole" -ItemType Directory
+New-Item -Path "$env:ProgramFiles\WindowsPowerShell\Modules\JEARoleOperators\$JEARole\RoleCapabilities" -ItemType Directory
+New-ModuleManifest -Path "$env:ProgramFiles\WindowsPowerShell\Modules\JEARoleOperators\$JEARole\$JEARole.psd1"
+}
+else
+{
+Write-Output "Module Already Exists"
+}
+
+#Splatting
+$RoleCapabilityCreationParams = @{
+Path = "$env:ProgramFiles\WindowsPowerShell\Modules\JEARoleOperators\$JEARole\$JEARole.psrc"
+Author = 'Ritesh Grover'
+Company = 
+VisibleCmdlets = 'Restart-Service'
+#'get-service', @{Name = 'Restart-Service'; Parameters = @{Name = 'Name'; ValidateSet = 'Spooler'}}
+#Add Module and verb
+#'get-service', @{Name = 'Restart-Service'; Parameters = @{Name = 'Name'; ValidateSet = 'Spooler'}}, 'NetTCPIP\get-*'
+VisibleFunctions = '*-printer*'
+VisibleExternalCommands = 'c:\windows\System32\ipconfig.exe'
+FunctionDefination = @{ Name = 'Get-UserInfo'; ScriptBlock = { $PSSenderInfo } }
+}
+
+New-PSRoleCapabilityFile @RoleCapabilityCreationParams
+
+if ((Test-Path -Path "$env:ProgramData\JEAConfiguration") -eq $False)
+{
+Write-Output "Creating Directory"
+New-Item -Path "$env:ProgramData\JEAConfiguration" -ItemType Directory
+}
+
+#Cheak if already exisits
+Get-PSSessionConfiguration -Name $JEARole
+#Unregister if exisits
+Unregister-PSSessionConfiguration -Name $JEARole
+Restart-Service winrm
+
+
+#Session Configuration File
+$JEAConfigParam = @{
+SessionType = 'RestrictedRemoteServer'
+RunAsVirtualAccount = $true
+RoleDefinations = @{'Domain\JEA Print Group' = @{ RoleCapabilities = 'PrintOperator' }}
+TranscriptDirectory = "$env:ProgramData\JEAConfiguration\Transcripts"
+}
+New-PSSessionConfigurationFile -Path "$env:ProgramData\JEAConfiguration\JEARole-EUC-Support-Admin-L1.pssc" @JEAConfigParam
+
+#Register the Endpoint
+Register-PSSessionConfiguration -Name PrintOperators -Path "$env:ProgramData\JEAConfiguration\JEARole-EUC-Support-Admin-L1.pssc"
+Restart-Service winrm
+
+#Check the avaiability of Endpoint
+Get-PSSessionConfiguration
+
+#Test & Improve
+Enter-PSSession -ComputerName Client -ConfigurationName PrintOperators -Credential 
+
+#Enable Event Logs from Policy
+#Check Logsin Event Log
+$Events = Get-WinEvent -LogName Microsoft.Windows-WinRM/Operational |
+Where-Object {$_.ID -eq 193} | Select-Object -first 10
+# Copy Virtual Account
+$Events[0]
+#Check Other Log
+$Events1 = Get-WinEvent -LogName Microsoft.Windows-PowerShell/Operational |
+Where-Object {$_.UserID -eq 'ID GUID from Events[0]'}
+
+###JEADEPLOY###
+$JEARole = 'JEARole-EUC-Support-Admin-L1'
+#Check & Copy Session Configuration
+if ((Test-Path -Path "$env:ProgramData\JEAConfiguration") -eq $False)
+    {
+        Write-Output "Creating JEA Configuration Directory"
+        New-Item -Path "$env:ProgramData\JEAConfiguration" -ItemType Directory
+        Copy-Item -Path 'C:\JeaDeploy\$JEARole.pssc' -Destination 'C:\ProgramData\JEAConfiguration'
+    }
+else
+    {
+        Write-Output "JEA Configuration Directory Already Exists"
+    }
+
+#Check & Copy Role Capability and Modules
+if ((Test-Path -Path 'C:\Program Files\WindowsPowerShell\Modules\$JEARole') -eq $False)
+    {
+    New-Item -Path "C:\Program Files\WindowsPowerShell\Modules\$JEARole" -ItemType Directory
+    Copy-Item -Path 'C:\JeaDeploy\$JEARole' -Recurse -Destination 'C:\Program Files\WindowsPowerShell\Modules\$JEARole'
+      }
+else
+    {
+        Write-Output "JEA Role Capability and Modules Already Exists"
+    }
+
+#Register the Endpoint
+$Role = Get-PSSessionConfiguration -Name $JEARole
+    if(!$Role)
+        {
+            Register-PSSessionConfiguration -Name $JEARole
+        }
+    else
+        {
+            #Unregister if exists
+            Unregister-PSSessionConfiguration -Name $JEARole
+            Restart-Service winrm
+            Register-PSSessionConfiguration -Name $JEARole -Path 'C:\ProgramData\JEAConfiguration\$JEARole.pssc'
+        }
+
+Copy-Item -Path 'C:\JeaDeploy' -Recurse -Destination '\\Server\c$' -Force
+Invoke-Command -ComputerName S1 -FilePath c:\JeaDeploy\JeaDeploy.ps1
+###JEARoleCap###
+$JEARole = 'JEARole-EUC-Support-Admin-L1'
+if ((Test-Path -Path "$env:ProgramFiles\WindowsPowerShell\Modules\$JEARole") -eq $False)
+    {
+        Write-Output "Creating Directory"
+        New-Item -Path "$env:ProgramFiles\WindowsPowerShell\Modules\$JEARole" -ItemType Directory
+        New-Item -Path "$env:ProgramFiles\WindowsPowerShell\Modules\$JEARole\RoleCapabilities" -ItemType Directory
+        New-ModuleManifest -Path "$env:ProgramFiles\WindowsPowerShell\Modules\$JEARole\$JEARole.psd1"
+    }
+else
+    {
+        Write-Output "Module Already Exists"
+    }
+
+#Splatting
+$RoleCapabilityCreationParams = @{
+        Path = "$env:ProgramFiles\WindowsPowerShell\Modules\$JEARole\RoleCapabilities\$JEARole.psrc"
+        Description = 'This role capability exposes basic networking, security, AD, DNS and configuration settings for the local server.'
+        Author = 'Ritesh Grover'
+        Company = 
+        VisibleCmdlets = 'Get-Service',
+                         'Restart-Service',
+                         'Restart-Computer',
+                         'Stop-Service',
+                         'Start-Service',
+                         'Get-Process',
+                         'Stop-Process',
+                         'Get-Eventlog',
+                         'Get-AD*',
+                         'Get-WindowsFeature',
+                         'Get-HotFix',
+                         'Defender\*',
+                         'NetAdapter\*',
+                         'NetConnection\*',
+                         'NetSecurity\Get-*',
+                         'NetTCPIP\*',
+                         'Clear-DnsClientCache',
+                         'Set-DnsClientServerAddress',
+                         'Resolve-DnsName',
+                         'Get-SystemInfo',
+                         'Test-Connection',
+                         'Microsoft.PowerShell.LocalAccounts\Get-*',
+                         'DnsServer\Get-*'
+        VisibleFunctions = 'Get-DNS*','Add-DnsServerResourceRecord*'
+        VisibleExternalCommands = 'c:\windows\System32\ipconfig.exe', 'C:\Windows\System32\gpupdate.exe', 'C:\Windows\System32\gpresult.exe'
+        FunctionDefinitions = @{ Name = 'Get-UserInfo'; ScriptBlock = { $PSSenderInfo } }
+        }
+New-PSRoleCapabilityFile @RoleCapabilityCreationParams     
+###JEASessionConf###
+$JEARole = 'JEARole-EUC-Support-Admin-L1'
+if ((Test-Path -Path "$env:ProgramData\JEAConfiguration") -eq $False)
+    {
+        Write-Output "Creating Directory"
+        New-Item -Path "$env:ProgramData\JEAConfiguration" -ItemType Directory
+    }
+#Check if already exists
+Try 
+{
+    $Role = Get-PSSessionConfiguration -Name $JEARole
+    if(!$Role)
+        {
+            $JEAConfigParam = @{
+                SessionType = 'RestrictedRemoteServer'
+                RunAsVirtualAccount = $true
+                RoleDefinitions = @{'XXXnor\userid' = @{ RoleCapabilities = '$JEARole' }}
+                TranscriptDirectory = "$env:ProgramData\JEAConfiguration\Transcripts"
+                }
+            New-PSSessionConfigurationFile -Path "$env:ProgramData\JEAConfiguration\$JEARole.pssc" @JEAConfigParam
+        }
+    else
+        {
+            #Unregister if exists
+            Unregister-PSSessionConfiguration -Name $JEARole
+            Restart-Service winrm
+            $JEAConfigParam = @{
+                SessionType = 'RestrictedRemoteServer'
+                RunAsVirtualAccount = $true
+                RoleDefinitions = @{'XXXnor\userid' = @{ RoleCapabilities = '$JEARole' } }
+                TranscriptDirectory = "$env:ProgramData\JEAConfiguration\Transcripts"
+                }
+                New-PSSessionConfigurationFile -Path "$env:ProgramData\JEAConfiguration\$JEARole.pssc" @JEAConfigParam
+        }
+    Register-PSSessionConfiguration -Name $JEARole -Path "$env:ProgramData\JEAConfiguration\$JEARole.pssc"
+}
+Catch
+{
+ Write-Host $_.Exception.Message  -ForegroundColor Red -BackgroundColor White 
+}
+###JEASource###
+$JEARole = 'JEARole-EUC-Support-Admin-L1'
+if ((Test-Path -Path C:\JeaDeploy) -eq $False)
+    {
+        Write-Output "Creating Directory"
+        New-Item -Path C:\JeaDeploy -ItemType Directory
+        New-Item -Path C:\JeaDeploy\$JEARole -ItemType Directory
+        Copy-Item -Path 'C:\ProgramData\JEAConfiguration\$JEARole.pssc' -Destination 'C:\JeaDeploy'
+        Copy-Item -Path 'C:\Program Files\WindowsPowerShell\Modules\$JEARole' -Recurse -Destination 'C:\JeaDeploy\$JEARole'
+    }
+else
+{
+        Write-host "C:\JEADeploy Folder Already Exists"
+}
+

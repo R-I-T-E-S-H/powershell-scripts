@@ -1,0 +1,37 @@
+{
+    "mode": "Indexed",
+    "type": "Microsoft.Authorization/policyDefinitions",
+    "name": "contoso-enforce-tag-and-value",
+    "properties" : {
+        "displayName": "Enforce tag and its value",
+        "policyType": "Custom",
+        "description": "Enforces a required tag and its value.",
+        "metadata": {
+          "category": "TAG"
+          },    
+          "parameters": {
+            "tagName": {
+               "type": "String",
+               "metadata": {
+                  "description": "Name of the tag, such as costCenter"
+               }
+            },
+            "tagValue": {
+               "type": "Array",
+               "metadata": {
+                  "description": "The List of Tag Values that are Allowed",
+                  "displayName": "Allowed Values"
+               }
+            }
+         },
+         "policyRule": {
+            "if": {
+                  "field": "[concat('tags[', parameters('tagName'), ']')]",
+                  "notIn": "[parameters('tagValue')]"
+            },
+            "then": {
+               "effect": "deny"
+            }
+         }
+      }
+  }
