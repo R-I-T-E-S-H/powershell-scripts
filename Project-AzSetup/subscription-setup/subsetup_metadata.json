@@ -1,0 +1,10 @@
+{
+  "$schema": "https://aka.ms/azure-quickstart-templates-metadata-schema#",
+  "type": "QuickStart",
+  "itemDisplayName": "Create an Storage Account, Azure Key Vault , Automation Account and a Log Analytics",
+  "description": "This template creates an Storage Account, Azure Key Vault , Automation Account and a Log Analytics",
+  "summary": "This template creates a Storage Account, Key Vault and assigns get permissions to the supplied objectId (principal).",
+  "githubUsername": "riteshgrover",
+  "dateUpdated": "2019-02-14"
+}
+

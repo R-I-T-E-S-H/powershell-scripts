@@ -1,0 +1,22 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "keyVaultName": {
+        "value": "gth-plt-shr-we-test"
+      },
+      "logAnalyticsName": {
+        "value": "gth-plt-shr-we-test"
+      },
+      "automationAccountName": {
+        "value": "gth-plt-shr-we-test"
+      },
+      "objectId": {
+        "value": "d987654a-3b8c-42b3-a868-750c8601b4"
+      },
+      "storageAccountName": {
+        "value": "gthpltshrwetestk"
+      }
+    }
+  }
+
